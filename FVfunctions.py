@@ -69,15 +69,8 @@ def pot4band(arr_freq, psd):
 
     # 5- Preparación de arrays
     arr_pot_abs4band = np.array(arr_pot_abs4band)
-    totalPow = np.sum(arr_pot_abs4band)
-    arr_pot_rel4band = (100 * arr_pot_abs4band) / totalPow
-
-    # 6- Concatenación de arrays
-    arr_storage = np.array([totalPow])
-    arr_storage = np.concatenate((arr_storage, arr_pot_abs4band))
-    arr_storage = np.concatenate((arr_storage, arr_pot_rel4band))
-
-    return arr_storage
+    
+    return arr_pot_abs4band
 
 
 def pot4signals(arr_signals, fs=512, divisor=100):
