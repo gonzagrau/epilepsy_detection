@@ -4,6 +4,8 @@ from mne import io
 import random
 import scipy.signal as signal
 import pandas as pd
+from features_stats import rms
+from features_stats import stats_features
 
 # CONTANTE: Bandas de ondas "del alfabeto griego"
 BANDAS = np.array([[0.5, 4],
@@ -179,10 +181,14 @@ def getMeData(signal, mtx_t_reg, arr_mtx_t_epi, winlen=2, fs=512, proportion=0.4
     arr_pot4segsig_true = pot4signals(arr_filtered_seg_sig_true, divisor=1)
 
     # 4.OTROS FEATURES
+    #calculo los parametros estadisticos kurtosis, RMS, skewness, media, desvio estandar para cada senal
+    dic_stat_features_true = stats_features(arr_filtered_seg_sig_true)
 
     # 4.FINAL-
     # fv_true = []
     fv_true = arr_pot4segsig_true
+    #concateno la data de las potencias con la de los 5 parametros estadisticos
+    fv_true = np.concatenate(fv_true,dic_stat_features_true["matriz de features stat"])
     labels_true = np.ones(len(true_indexes))
 
     ###########################################################################
@@ -208,10 +214,13 @@ def getMeData(signal, mtx_t_reg, arr_mtx_t_epi, winlen=2, fs=512, proportion=0.4
     arr_pot4segsig_false = pot4signals(arr_filtered_seg_sig_false, divisor=1)
 
     # 5.OTROS FEATURES
+    dic_stat_features_false = stats_features(arr_filtered_seg_sig_false)
 
     # 5.FINAL-
     # fv_false = []
     fv_false = arr_pot4segsig_false
+    #concateno la data de las potencias con la de los 5 parametros estadisticos
+    fv_false = np.concatenate(fv_false,dic_stat_features_false["matriz de features stat"])
     labels_false = np.zeros(len(selected_false_indexes))
 
     ###########################################################################
@@ -294,7 +303,7 @@ def test():
     # Utilización de la función para una única señal
     arr_fv, arr_labels = getMeData(signal=data_namefilt[0], mtx_t_reg=mtx_t_reg, arr_mtx_t_epi=arr_mtx_t_epi)
     columnas = ['Pot total', 'potAbsDelta', 'potAbsTheta', 'potAbsAlpha', 'potAbsBeta', 'potAbsGamma', 'potRelDelta',
-                'potRelTheta', 'potRelAlpha', 'potRelBeta', 'potRelGamma']
+                'potRelTheta', 'potRelAlpha', 'potRelBeta', 'potRelGamma',"kurtosis","RMS","skewness","media","desvio estandar"]
     df_fv = pd.DataFrame(data=arr_fv, columns=columnas)
     print(df_fv.head(10))
     # Feature vector:
