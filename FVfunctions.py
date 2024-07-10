@@ -1,75 +1,97 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from mne import io
 import random
 from datetime import  datetime, timedelta
 import scipy.signal as signal
 import pandas as pd
-from features_stats import rms
 from features_stats import stats_features
-from typing import Tuple, List, Dict
+from typing import Tuple, List
 
-# CONTANTE: Bandas de ondas "del alfabeto griego"
-BANDAS = np.array([[0.5, 4],
-                   [4,8],
-                   [8,13],
-                   [13,30],
-                   [30,50]])
+# CONSTANTE: Bandas de ritmos cerebrales
+BANDAS = {"delta": [0.5, 4],
+          "theta": [4,8],
+          "alpha": [8,13],
+          "beta": [13,30],
+          "gamma": [30,50]}
 
 
-# Función para calcular segundos a la hora 00.00.00
-def time2seg(time, ref_time="00.00.00"):
-    # Define the format
+def time2seg(time: str, ref_time: str="00.00.00") -> np.uint32:
+    """
+    Función para calcular segundos a la hora 00.00.00
+    """
+
     time_format = "%H.%M.%S"
-
-    # Parse the time samples into datetime objects using a default date
-    default_date = "2022-12-18"  # Use any arbitrary date
+    default_date = "2022-12-18"
     time_i = datetime.strptime(default_date + " " + ref_time, "%Y-%m-%d " + time_format)
     time_f = datetime.strptime(default_date + " " + time, "%Y-%m-%d " + time_format)
 
-    # If time2 is earlier in the day than time1, add one day to time2
+    # Si el tiempo final excede al inicial, hubo un salto de dia
     if time_f < time_i:
         time_f += timedelta(days=1)
 
-    # Calculate the difference
     time_difference = time_f - time_i
-
-    # Convert the difference to seconds
     elapsed_seconds = time_difference.total_seconds()
 
     return np.uint32(elapsed_seconds)
 
 
-def FIRfilterBP(arr_signals, freq=[1, 100], order=(2 ** 8) + 1, fs=512):
-    # 0- Cálculo de los coeficientes del filtro FIR
+def FIRfilterBP(arr_signals: np.ndarray,
+                freq:List[int] | None = None,
+                order: int=(2 ** 8) + 1,
+                fs: int=512) -> np.ndarray:
+    """
+    Aplica un filtro pasabandas FIR vectorialmente a un array de señales
+    :param arr_signals: matriz NxL, donde cada fila es una señal, cada columna una muestra temporal
+    :param freq: lista de frecuencias de corte
+    :param order: orden del filtro
+    :param fs: frecuencia de muestreo
+    :return: matrix NxL con las señales filtradas
+    """
+    if freq is None:
+        freq = [1, 100]
+
     b_bp = signal.firwin(numtaps=order, cutoff=freq, window="blackman", pass_zero="bandpass", fs=fs)
-
-    # 1- Aplicación del filtro a las señales
-    arr_filtered_signals = np.array([signal.filtfilt(b_bp, 1, sig) for sig in arr_signals])
+    arr_filtered_signals = signal.filtfilt(b_bp, 1, arr_signals, axis=1)
 
     return arr_filtered_signals
 
 
-def IIRfilterBS(arr_signals, freq=[49.5, 50.5], order=2, fs=512):
-    # 0- Cálculo de los coeficientes del filtro IIR
+def IIRfilterBS(arr_signals: np.ndarray,
+                freq: List[int] | None=None,
+                order: int=2,
+                fs: int=512) -> np.ndarray:
+    """
+    Aplica un filtro pasabandas FIR vectorialmente a un array de señales
+    (Ver docstring de FIRfilterBS() para mas informacion)
+    """
+    if freq is None:
+        freq = [49.5, 50.5]
+
     b_bs, a_bs = signal.iirfilter(N=order, Wn=freq, btype="bandstop", ftype='butter', fs=fs, output='ba')
-
-    # 1- Aplicación del filtro a las señales
-    arr_filtered_signals = np.array([signal.filtfilt(b_bs, a_bs, sig) for sig in arr_signals])
+    arr_filtered_signals = signal.filtfilt(b_bs, a_bs, arr_signals, axis=1)
 
     return arr_filtered_signals
 
 
-def closest(lst, K):
+def closest(lst: List[float] | np.ndarray, K: float | int) -> float:
+    """
+    Finds the closest value in iterable (i.e: list, np.ndarray) 'lst' to the value 'K'
+    """
     return lst[min(range(len(lst)), key = lambda i: abs(K-lst[i]))]
 
 
-def pot4band(arr_freq, psd):
+def pot4band(arr_freq: np.ndarray, psd: np.ndarray) -> np.ndarray:
+    """
+    Calcula la potencia absoluta de cada banda frecuencial de ritmos cerebrales en una PSD
+    :param arr_freq: bins de frecuencias en la PSD
+    :param psd: power sprectral density estimada
+    :return: array 1D con la potencia de cada banda
+    """
     # 0- Definición de lista de almacenamiento
     arr_pot_abs4band = []
 
     # 1- Cálculo de potencias absolutas y relativas para cada banda
-    for banda in BANDAS:
+    for banda in BANDAS.values():
         # 2- Encontrar los índices de las frecuencias dentro de la banda de interés
         cercano_min = closest(arr_freq, banda[0])
         cercano_max = closest(arr_freq, banda[1])
@@ -89,7 +111,14 @@ def pot4band(arr_freq, psd):
     return arr_pot_abs4band
 
 
-def pot4signals(arr_signals, fs=512, divisor=100):
+def pot4signals(arr_signals: np.ndarray, fs: int=512, divisor: int=100) -> np.ndarray:
+    """
+    Calcula la potencia en cada banda para un array de señales, estimando PSD con Welch
+    :param arr_signals: matriz NxL donde cada fila es una señal de longitud L
+    :param fs: frecuencia de muestro
+    :param divisor: cantidad de segmentos para welch
+    :return:
+    """
     # 0- Cálculo del nper
     nper = int(len(arr_signals[0]) // divisor)
 
@@ -125,16 +154,16 @@ def getMeData(sig: np.ndarray,
               arr_mtx_t_epi: np.ndarray,
               winlen: int=2,
               fs: int=512,
-              proportion: float=0.4) :
+              proportion: float=0.4) -> Tuple[np.ndarray, np.ndarray]:
     """
     Segmenta la señal en intervalos de longitud winlen [s] clasificados como 1 o 0 (epilepsio o no epilepsia)
     :param sig: señal leida de un único canal EEG
     :param mtx_t_reg: array 2x3 con inicio y final de lectura en [hh, mm, ss]
-    :param arr_mtx_t_epi: array nx2x3 con inicios y finales de ataques epilépticos en [hh, mm, ss]
+    :param arr_mtx_t_epi: array Nx(2x3) con N inicios y finales de ataques epilépticos en [hh, mm, ss]
     :param winlen: longitud de los segmentos a extraer
     :param fs: frecuencia de muestreo
     :param proportion: proporcios de segmentos 'False' (la de 'True' sería 1.0 - proportion)
-    :return:
+    :return: tupla con arr_seg (matriz de señales en cada fila) y labels (etiqueta de cada segmentos)
     """
     # 0- Declaración de parámetros importantes
     step = fs * winlen
@@ -225,27 +254,9 @@ def test():
     DATA_DIR = r"../eeg_dataset/physionet.org/files/siena-scalp-eeg/1.0.0/"
     path01 = rf"{DATA_DIR}PN05/PN05-2.edf"
     raw01 = io.read_raw_edf(path01)
-    paciente = "PN05"
-    realizacion = "2"
-
-    ###########################################################################
-    # Organización de la información dentro del archivo .edf
-    ###########################################################################
-
     info = raw01.info
 
-    print(info)
-    print(info['ch_names'])
-
-    ###########################################################################
-    # Obtención de las mediciones a utilizar y otros datos importantes
-    ###########################################################################
-
-    # Se obtiene el nombre de todos los canales
-    ch_nms = info["ch_names"]
-
     # Se obtienen los canales seleccionados del lazo izquierdo
-    #filt_ch_nms = ['EEG T3', 'EEG T5']
     filt_ch_nms = ['EEG T3','EEG T5','EEG F7','EEG F3','EEG C3','EEG P3']
 
     # Seleccionar los datos de los canales filtrados
@@ -257,29 +268,6 @@ def test():
     # Se convierten las mediciones a microvoltios
     data_namefilt = data_namefilt * 1e6
 
-    # Dimensiones de 'data_filt'
-    dim_data_filt = np.shape(data_namefilt)
-
-    # Verifición
-    print("Canales filtrados:", filt_ch_nms)
-    print(f"Cantidad de canales resultantes: {dim_data_filt[0]}")
-    print(f"Cantidad de datos en cada canal: {dim_data_filt[1]}")
-
-    # Frecuencia de muestreo en Hz
-    fs = info["sfreq"]
-
-    # Cantidad de muestras tomadas
-    len_data = dim_data_filt[1]
-
-    # Array de instantes
-    start = 0
-    stop = (1 / fs) * len_data
-    arr_t = np.arange(start=start, stop=stop, step=(1 / fs))
-
-    # Verificación de datos
-    print("Frecuencia de muestreo:", fs)
-    print("Instantes [s]:", arr_t[0], "...", arr_t[-1])
-
     # Matriz de inicio de registro y final de registro
     mtx_t_reg = np.array(["06.46.02", "09.19.47"])
 
@@ -289,14 +277,23 @@ def test():
 
     # Utilización de la función para una única señal
     arr_seg, arr_labels = getMeData(sig=data_namefilt[0], mtx_t_reg=mtx_t_reg, arr_mtx_t_epi=arr_mtx_t_epi)
+
+    # Potencia
+    fs = info["sfreq"]
     pot_seg = pot4signals(arr_seg, fs, divisor=1)
+    pot_names = [f"potAbs{band.capitalize()}" for band in BANDAS.keys()]
+
+    # Estadistica
     stats_data = stats_features(arr_seg)
+    stats_names = list(stats_data.values())[:-1]
     stats_seg = stats_data["matriz de features stat"]
+
+    # Feature fector
     arr_fv = np.hstack((pot_seg, stats_seg))
-    columnas = ['potAbsDelta', 'potAbsTheta', 'potAbsAlpha', 'potAbsBeta', 'potAbsGamma',
-                "kurtosis", "RMS", "skewness", "media", "desvio estandar"]
+    columnas = pot_names + stats_names
     df_fv = pd.DataFrame(data=arr_fv, columns=columnas)
     print(df_fv.head(10))
+
     return  df_fv
 
 
