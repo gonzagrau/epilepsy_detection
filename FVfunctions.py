@@ -97,19 +97,27 @@ def pot4signals(arr_signals, fs=512, divisor=100):
     arr_freq = signal.welch(x=arr_signals[0], fs=fs, noverlap=nper // 2, nperseg=nper)[0]
     arr_psd = np.array([signal.welch(x=sig, fs=fs, noverlap=nper // 2, nperseg=nper)[1] for sig in arr_signals])
 
-    """plt.figure(figsize=(10, 4))
-    plt.plot(np.arange(len(arr_signals[0])), arr_signals[0])
-    plt.show()
-
-    plt.figure(figsize=(10, 4))
-    plt.plot(arr_freq, arr_psd[0])
-    plt.xlim(left=0,right=50)
-    plt.show()"""
-
     # 2 Cálculo de potencias para cada señal del array de señales
     arr_pot4signals = np.array([pot4band(arr_freq, psd) for psd in arr_psd])
 
     return arr_pot4signals
+
+
+def get_interval_range(t_start: int, t_end: int, fs: int, winlen: int) -> np.ndarray:
+    """
+    Crea un array que representa un slice temporal desde t_start hasta t_end con un ancho de winlen, los 3 en [s]
+    :param t_start: tiempo inicial en segundos
+    :param t_end: tiempo final en segundos
+    :param fs: frecuencia de muestreo, en Hz
+    :param winlen: longitud de la ventana temporal, en segundos
+    :return: arange desde t_start hasta t_end expresado en MUESTRAS (i.e.: indices)
+    """
+    step = fs * winlen
+    i_start = fs * t_start
+    start = i_start
+    stop = step * ((t_end - t_start) // winlen) + i_start
+    interval = np.arange(start=start, stop=stop, step=step)
+    return interval
 
 
 def getMeData(sig: np.ndarray,
@@ -132,133 +140,84 @@ def getMeData(sig: np.ndarray,
     step = fs * winlen
 
     ###########################################################################
-    # PARTE 1 - Obtención de instante inicial y final
-    ###########################################################################
-
-    t_reg_start = time2seg(mtx_t_reg[0][0], mtx_t_reg[0][1], mtx_t_reg[0][2])
-    t_reg_end = time2seg(mtx_t_reg[1][0], mtx_t_reg[1][1], mtx_t_reg[1][2])
-
-    ###########################################################################
-    # PARTE 2 - Obtención de índices iniciales de intervalos verdaderos
+    # PARTE 1 - Obtención de índices iniciales de intervalos verdaderos
     ###########################################################################
 
     true_indexes = []
     for i in range(len(arr_mtx_t_epi)):
-        # 2.0- Obtención de instantes característicos del ataque epiléptico
+        # 1.0- Obtención de instantes característicos del ataque epiléptico
         mtx_inst = arr_mtx_t_epi[i]
 
-        t_epi_start = time2seg(mtx_inst[0][0], mtx_inst[0][1], mtx_inst[0][2]) - t_reg_start
-        t_epi_end = time2seg(mtx_inst[1][0], mtx_inst[1][1], mtx_inst[1][2]) - t_reg_start
+        t_epi_start =   time2seg(time=mtx_inst[0],ref_time=mtx_t_reg[0])
+        t_epi_end   =   time2seg(time=mtx_inst[1],ref_time=mtx_t_reg[0])
 
-        # 2.1- Obtención de índice inicial del ataque epiléptico
-        i_epi_start = fs * t_epi_start
-
-        # 2.2- Obtención de índices iniciales de cada segmento de longitud 'step'
-        start = i_epi_start
-        stop = step * ((t_epi_end - t_epi_start) // winlen) + i_epi_start
-        interval = np.arange(start=start, stop=stop, step=step)
-
-        # 2.3- Concatenación del array de índices al array de índices iniciales de intervalos verdaderos
+        interval = get_interval_range(t_epi_start, t_epi_end, fs, winlen)
         true_indexes = np.uint32(np.concatenate((true_indexes, interval)))
 
     ###########################################################################
-    # PARTE 3 - Obtención de índices iniciales de intervalos falsos
+    # PARTE 2 - Obtención de índices iniciales de intervalos falsos
     ###########################################################################
 
+    # 2.0-  Obtención de instantes característicos del intervalo falso
     false_indexes = []
     for i in range(len(arr_mtx_t_epi) + 1):
         if i == 0:
-            # 3.0-  Obtención de instantes característicos del intervalo falso
-            t_int_start = t_reg_start - t_reg_start
-            t_int_end = time2seg(arr_mtx_t_epi[0][0][0], arr_mtx_t_epi[0][0][1], arr_mtx_t_epi[0][0][2]) - t_reg_start
+            t_int_start = 0
+            t_int_end = time2seg(time=arr_mtx_t_epi[0][0], ref_time=mtx_t_reg[0])
 
         elif i == len(arr_mtx_t_epi):
-            # 3.0-  Obtención de instantes característicos del intervalo falso
-            t_int_start = time2seg(arr_mtx_t_epi[i - 1][1][0], arr_mtx_t_epi[i - 1][1][1],
-                                   arr_mtx_t_epi[i - 1][1][2]) - t_reg_start
-            t_int_end = t_reg_end - t_reg_start
+            t_int_start = time2seg(time=arr_mtx_t_epi[i - 1][1], ref_time=mtx_t_reg[0])
+            t_int_end = time2seg(time=mtx_t_reg[1], ref_time=mtx_t_reg[0])
 
         else:
-            # 3.0-  Obtención de instantes característicos del intervalo falso
-            t_int_start = time2seg(arr_mtx_t_epi[i - 1][1][0], arr_mtx_t_epi[i - 1][1][1],
-                                   arr_mtx_t_epi[i - 1][1][2]) - t_reg_start
-            t_int_end = time2seg(arr_mtx_t_epi[i][0][0], arr_mtx_t_epi[i][0][1], arr_mtx_t_epi[i][0][2]) - t_reg_start
+            t_int_start = time2seg(time=arr_mtx_t_epi[i - 1][1], ref_time=mtx_t_reg[0])
+            t_int_end = time2seg(time=arr_mtx_t_epi[i][0], ref_time=mtx_t_reg[0])
 
-        # 3.1- Obtención de índice inicial del intervalo falso
-        i_int_start = fs * t_int_start
+        # 2.1- Obtención de índice inicial del intervalo falso
+        interval = get_interval_range(t_int_start, t_int_end, fs, winlen)
 
-        # 3.2- Obtención de índices iniciales de cada segmento de longitud 'step'
-        start = i_int_start
-        stop = step * ((t_int_end - t_int_start) // winlen) + i_int_start
-        interval = np.arange(start=start, stop=stop, step=step)
-
-        # 3.3- Concatenación del array de índices al array de índices iniciales de intervalos falsos
+        # 2.3- Concatenación del array de índices al array de índices iniciales de intervalos falsos
         false_indexes = np.uint32(np.concatenate((false_indexes, interval)))
 
     ###########################################################################
-    # PARTE 4 - Obtención de feature vectors y labels de elementos verdaderos
+    # PARTE 3 - Obtención de feature vectors y labels de elementos verdaderos
     ###########################################################################
 
-    # 4.0- Obtención de array con los segmentos de señal verdaderos
+    # 3.0- Obtención de array con los segmentos de señal verdaderos
     arr_seg_sig_true = np.array([sig[idx:idx + step] for idx in true_indexes])
+    labels_true = np.ones(len(true_indexes))
 
-    # 4.1- Filtrado de los segmentos de la señal verdaderos
+    # 3.1- Filtrado de los segmentos de la señal verdaderos
     arr_filtered_seg_sig_true = FIRfilterBP(arr_seg_sig_true)
     arr_filtered_seg_sig_true = IIRfilterBS(arr_filtered_seg_sig_true)
 
-    # # 4.2- Potencias de los segmentos de la señal verdaderos
-    # arr_pot4segsig_true = pot4signals(arr_filtered_seg_sig_true, divisor=1)
-    #
-    # # 4.OTROS FEATURES
-    # #calculo los parametros estadisticos kurtosis, RMS, skewness, media, desvio estandar para cada senal
-    # dic_stat_features_true = stats_features(arr_filtered_seg_sig_true)
-
-    # 4.FINAL-
-    # fv_true = []
-    # fv_true = arr_pot4segsig_true
-    # #concateno la data de las potencias con la de los 5 parametros estadisticos
-    # fv_true = np.concatenate(fv_true,dic_stat_features_true["matriz de features stat"])
-    labels_true = np.ones(len(true_indexes))
-
     ###########################################################################
-    # PARTE 5 - Obtención de feature vectors y labels de elementos falsos
+    # PARTE 4 - Obtención de feature vectors y labels de elementos falsos
     ###########################################################################
 
-    # 5.0- Cálculo de cantidades características
+    # 4.0- Cálculo de cantidades características
     n_true_segments = len(true_indexes)
     k_false_segments = np.uint16(n_true_segments / proportion + 1) - np.uint16(n_true_segments)
 
-    # 5.1- Obtención de 'k' indices no repetidos de intervalos falsos
+    # 4.1- Obtención de 'k' indices no repetidos de intervalos falsos
     selected_false_indexes = random.sample(population=list(false_indexes), k=k_false_segments)
 
-    # 5.2- Obtención de array con los segmentos de la señal falsos
+    # 4.2- Obtención de array con los segmentos de la señal falsos
     arr_seg_sig_false = np.array([sig[idx: idx + step] for idx in selected_false_indexes])
+    labels_false = np.zeros(len(selected_false_indexes))
 
-    # 5.3- Filtrado de los segmentos de la señal falsos
+    # 4.3- Filtrado de los segmentos de la señal falsos
     arr_filtered_seg_sig_false = FIRfilterBP(arr_seg_sig_false)
     arr_filtered_seg_sig_false = IIRfilterBS(arr_filtered_seg_sig_false)
 
-    # # 5.4- Potencias de los segmentos de la señal falsos
-    # arr_pot4segsig_false = pot4signals(arr_filtered_seg_sig_false, divisor=1)
-    #
-    # # 5.OTROS FEATURES
-    # dic_stat_features_false = stats_features(arr_filtered_seg_sig_false)
-    #
-    # # 5.FINAL-
-    # # fv_false = []
-    # fv_false = arr_pot4segsig_false
-    # #concateno la data de las potencias con la de los 5 parametros estadisticos
-    # fv_false = np.concatenate(fv_false,dic_stat_features_false["matriz de features stat"])
-    labels_false = np.zeros(len(selected_false_indexes))
-
     ###########################################################################
-    # PARTE 6 - Unión de arrays
+    # PARTE 5 - Unión de arrays
     ###########################################################################
 
-    arr_fv = np.concatenate((arr_filtered_seg_sig_true, arr_filtered_seg_sig_false))
+    arr_seg = np.concatenate((arr_filtered_seg_sig_true, arr_filtered_seg_sig_false))
     arr_labels = np.concatenate((labels_false, labels_true))
 
-    return arr_fv, arr_labels
+    return arr_seg, arr_labels
 
 
 def test():
@@ -322,10 +281,10 @@ def test():
     print("Instantes [s]:", arr_t[0], "...", arr_t[-1])
 
     # Matriz de inicio de registro y final de registro
-    mtx_t_reg = np.array([[6, 46, 2], [9, 19, 47]])
+    mtx_t_reg = np.array(["06.46.02", "09.19.47"])
 
     # Array de matrices con instantes iniciales y finales de ataque epileptico
-    mtx_inst1 = np.array([[8, 45, 25], [8, 46, 0]])
+    mtx_inst1 = np.array(["08.45.25", "08.46.00"])
     arr_mtx_t_epi = np.array([mtx_inst1])
 
     # Utilización de la función para una única señal
@@ -337,7 +296,7 @@ def test():
     columnas = ['potAbsDelta', 'potAbsTheta', 'potAbsAlpha', 'potAbsBeta', 'potAbsGamma',
                 "kurtosis", "RMS", "skewness", "media", "desvio estandar"]
     df_fv = pd.DataFrame(data=arr_fv, columns=columnas)
-    # print(df_fv.head(10))
+    print(df_fv.head(10))
     return  df_fv
 
 
