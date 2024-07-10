@@ -1,6 +1,6 @@
 import re
 from typing import Dict, List
-
+from mne import io
 import numpy as np
 
 seizure_pattern = re.compile(r"Seizure n (\d+): ?\n?"
@@ -42,6 +42,18 @@ def get_seizure_array(seizures: List[Dict[str, str]]) -> np.ndarray:
     Transforma la información extraida por la función anterior a un array de eventos
     """
     return np.array([ [s["seizure_start_time"], s["seizure_end_time"]] for s in seizures])
+
+
+def read_channel(filename: str, channel: str='EEG T3') -> np.ndarray:
+    """
+    Lee un canal de un archivo .edf
+    :param filename: nombre el archivo a leer
+    :param channel: nombre del canal a leer
+    :return: la señal en dicho canal
+    """
+    raw = io.read_raw_edf(filename)
+    ...
+
 
 def main():
     DATA_DIR = r"../eeg_dataset/physionet.org/files/siena-scalp-eeg/1.0.0/"
