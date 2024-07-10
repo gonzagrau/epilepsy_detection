@@ -2,10 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mne import io
 import random
+from datetime import  datetime, timedelta
 import scipy.signal as signal
 import pandas as pd
 from features_stats import rms
 from features_stats import stats_features
+from typing import Tuple, List, Dict
 
 # CONTANTE: Bandas de ondas "del alfabeto griego"
 BANDAS = np.array([[0.5, 4],
@@ -15,15 +17,27 @@ BANDAS = np.array([[0.5, 4],
                    [30,50]])
 
 
+# Función para calcular segundos a la hora 00.00.00
+def time2seg(time, ref_time="00.00.00"):
+    # Define the format
+    time_format = "%H.%M.%S"
 
-def time2seg(hora,minuto,segundo):
-    seg1 = hora*3600
-    seg2 = minuto*60
-    seg3 = segundo
+    # Parse the time samples into datetime objects using a default date
+    default_date = "2022-12-18"  # Use any arbitrary date
+    time_i = datetime.strptime(default_date + " " + ref_time, "%Y-%m-%d " + time_format)
+    time_f = datetime.strptime(default_date + " " + time, "%Y-%m-%d " + time_format)
 
-    seg = seg1+seg2+seg3
+    # If time2 is earlier in the day than time1, add one day to time2
+    if time_f < time_i:
+        time_f += timedelta(days=1)
 
-    return seg
+    # Calculate the difference
+    time_difference = time_f - time_i
+
+    # Convert the difference to seconds
+    elapsed_seconds = time_difference.total_seconds()
+
+    return np.uint32(elapsed_seconds)
 
 
 def FIRfilterBP(arr_signals, freq=[1, 100], order=(2 ** 8) + 1, fs=512):
@@ -80,8 +94,8 @@ def pot4signals(arr_signals, fs=512, divisor=100):
     nper = int(len(arr_signals[0]) // divisor)
 
     # 1- Cálculo del array de PSDs para cada señal del array de señales
-    arr_freq = signal.welch(x=arr_signals[0], fs=fs, noverlap=nper / 2, nperseg=nper)[0]
-    arr_psd = np.array([signal.welch(x=sig, fs=fs, noverlap=nper / 2, nperseg=nper)[1] for sig in arr_signals])
+    arr_freq = signal.welch(x=arr_signals[0], fs=fs, noverlap=nper // 2, nperseg=nper)[0]
+    arr_psd = np.array([signal.welch(x=sig, fs=fs, noverlap=nper // 2, nperseg=nper)[1] for sig in arr_signals])
 
     """plt.figure(figsize=(10, 4))
     plt.plot(np.arange(len(arr_signals[0])), arr_signals[0])
@@ -98,7 +112,22 @@ def pot4signals(arr_signals, fs=512, divisor=100):
     return arr_pot4signals
 
 
-def getMeData(signal, mtx_t_reg, arr_mtx_t_epi, winlen=2, fs=512, proportion=0.4):
+def getMeData(sig: np.ndarray,
+              mtx_t_reg: np.ndarray,
+              arr_mtx_t_epi: np.ndarray,
+              winlen: int=2,
+              fs: int=512,
+              proportion: float=0.4) :
+    """
+    Segmenta la señal en intervalos de longitud winlen [s] clasificados como 1 o 0 (epilepsio o no epilepsia)
+    :param sig: señal leida de un único canal EEG
+    :param mtx_t_reg: array 2x3 con inicio y final de lectura en [hh, mm, ss]
+    :param arr_mtx_t_epi: array nx2x3 con inicios y finales de ataques epilépticos en [hh, mm, ss]
+    :param winlen: longitud de los segmentos a extraer
+    :param fs: frecuencia de muestreo
+    :param proportion: proporcios de segmentos 'False' (la de 'True' sería 1.0 - proportion)
+    :return:
+    """
     # 0- Declaración de parámetros importantes
     step = fs * winlen
 
@@ -171,24 +200,24 @@ def getMeData(signal, mtx_t_reg, arr_mtx_t_epi, winlen=2, fs=512, proportion=0.4
     ###########################################################################
 
     # 4.0- Obtención de array con los segmentos de señal verdaderos
-    arr_seg_sig_true = np.array([signal[true_indexes[i]:(true_indexes[i] + step)] for i in range(len(true_indexes))])
+    arr_seg_sig_true = np.array([sig[idx:idx + step] for idx in true_indexes])
 
     # 4.1- Filtrado de los segmentos de la señal verdaderos
     arr_filtered_seg_sig_true = FIRfilterBP(arr_seg_sig_true)
     arr_filtered_seg_sig_true = IIRfilterBS(arr_filtered_seg_sig_true)
 
-    # 4.2- Potencias de los segmentos de la señal verdaderos
-    arr_pot4segsig_true = pot4signals(arr_filtered_seg_sig_true, divisor=1)
-
-    # 4.OTROS FEATURES
-    #calculo los parametros estadisticos kurtosis, RMS, skewness, media, desvio estandar para cada senal
-    dic_stat_features_true = stats_features(arr_filtered_seg_sig_true)
+    # # 4.2- Potencias de los segmentos de la señal verdaderos
+    # arr_pot4segsig_true = pot4signals(arr_filtered_seg_sig_true, divisor=1)
+    #
+    # # 4.OTROS FEATURES
+    # #calculo los parametros estadisticos kurtosis, RMS, skewness, media, desvio estandar para cada senal
+    # dic_stat_features_true = stats_features(arr_filtered_seg_sig_true)
 
     # 4.FINAL-
     # fv_true = []
-    fv_true = arr_pot4segsig_true
-    #concateno la data de las potencias con la de los 5 parametros estadisticos
-    fv_true = np.concatenate(fv_true,dic_stat_features_true["matriz de features stat"])
+    # fv_true = arr_pot4segsig_true
+    # #concateno la data de las potencias con la de los 5 parametros estadisticos
+    # fv_true = np.concatenate(fv_true,dic_stat_features_true["matriz de features stat"])
     labels_true = np.ones(len(true_indexes))
 
     ###########################################################################
@@ -203,31 +232,30 @@ def getMeData(signal, mtx_t_reg, arr_mtx_t_epi, winlen=2, fs=512, proportion=0.4
     selected_false_indexes = random.sample(population=list(false_indexes), k=k_false_segments)
 
     # 5.2- Obtención de array con los segmentos de la señal falsos
-    arr_seg_sig_false = np.array([signal[selected_false_indexes[i]:(selected_false_indexes[i] + step)] for i in
-                                  range(len(selected_false_indexes))])
+    arr_seg_sig_false = np.array([sig[idx: idx + step] for idx in selected_false_indexes])
 
     # 5.3- Filtrado de los segmentos de la señal falsos
     arr_filtered_seg_sig_false = FIRfilterBP(arr_seg_sig_false)
     arr_filtered_seg_sig_false = IIRfilterBS(arr_filtered_seg_sig_false)
 
-    # 5.4- Potencias de los segmentos de la señal falsos
-    arr_pot4segsig_false = pot4signals(arr_filtered_seg_sig_false, divisor=1)
-
-    # 5.OTROS FEATURES
-    dic_stat_features_false = stats_features(arr_filtered_seg_sig_false)
-
-    # 5.FINAL-
-    # fv_false = []
-    fv_false = arr_pot4segsig_false
-    #concateno la data de las potencias con la de los 5 parametros estadisticos
-    fv_false = np.concatenate(fv_false,dic_stat_features_false["matriz de features stat"])
+    # # 5.4- Potencias de los segmentos de la señal falsos
+    # arr_pot4segsig_false = pot4signals(arr_filtered_seg_sig_false, divisor=1)
+    #
+    # # 5.OTROS FEATURES
+    # dic_stat_features_false = stats_features(arr_filtered_seg_sig_false)
+    #
+    # # 5.FINAL-
+    # # fv_false = []
+    # fv_false = arr_pot4segsig_false
+    # #concateno la data de las potencias con la de los 5 parametros estadisticos
+    # fv_false = np.concatenate(fv_false,dic_stat_features_false["matriz de features stat"])
     labels_false = np.zeros(len(selected_false_indexes))
 
     ###########################################################################
     # PARTE 6 - Unión de arrays
     ###########################################################################
 
-    arr_fv = np.concatenate((fv_false, fv_true))
+    arr_fv = np.concatenate((arr_filtered_seg_sig_true, arr_filtered_seg_sig_false))
     arr_labels = np.concatenate((labels_false, labels_true))
 
     return arr_fv, arr_labels
@@ -301,13 +329,16 @@ def test():
     arr_mtx_t_epi = np.array([mtx_inst1])
 
     # Utilización de la función para una única señal
-    arr_fv, arr_labels = getMeData(signal=data_namefilt[0], mtx_t_reg=mtx_t_reg, arr_mtx_t_epi=arr_mtx_t_epi)
-    columnas = ['Pot total', 'potAbsDelta', 'potAbsTheta', 'potAbsAlpha', 'potAbsBeta', 'potAbsGamma', 'potRelDelta',
-                'potRelTheta', 'potRelAlpha', 'potRelBeta', 'potRelGamma',"kurtosis","RMS","skewness","media","desvio estandar"]
+    arr_seg, arr_labels = getMeData(sig=data_namefilt[0], mtx_t_reg=mtx_t_reg, arr_mtx_t_epi=arr_mtx_t_epi)
+    pot_seg = pot4signals(arr_seg, fs, divisor=1)
+    stats_data = stats_features(arr_seg)
+    stats_seg = stats_data["matriz de features stat"]
+    arr_fv = np.hstack((pot_seg, stats_seg))
+    columnas = ['potAbsDelta', 'potAbsTheta', 'potAbsAlpha', 'potAbsBeta', 'potAbsGamma',
+                "kurtosis", "RMS", "skewness", "media", "desvio estandar"]
     df_fv = pd.DataFrame(data=arr_fv, columns=columnas)
-    print(df_fv.head(10))
-    # Feature vector:
-    # [Pot total, potAbsDelta, potAbsTheta, potAbsAlpha, potAbsBeta, potAbsGamma, potRelDelta, potRelTheta, potRelAlpha, potRelBeta, potRelGamma]
+    # print(df_fv.head(10))
+    return  df_fv
 
 
 if __name__ == '__main__':
