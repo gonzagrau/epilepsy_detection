@@ -22,8 +22,14 @@ def time2seg(time: str, ref_time: str="00.00.00") -> np.uint32:
 
     time_format = "%H.%M.%S"
     default_date = "2022-12-18"
-    time_i = datetime.strptime(default_date + " " + ref_time, "%Y-%m-%d " + time_format)
-    time_f = datetime.strptime(default_date + " " + time, "%Y-%m-%d " + time_format)
+
+    try:
+        time_i = datetime.strptime(default_date + " " + ref_time, "%Y-%m-%d " + time_format)
+        time_f = datetime.strptime(default_date + " " + time, "%Y-%m-%d " + time_format)
+    except ValueError:
+        alt_time_format = '%H.%M.%S'
+        time_i = datetime.strptime(default_date + " " + ref_time, "%Y-%m-%d " + alt_time_format)
+        time_f = datetime.strptime(default_date + " " + time, "%Y-%m-%d " + alt_time_format)
 
     # Si el tiempo final excede al inicial, hubo un salto de dia
     if time_f < time_i:

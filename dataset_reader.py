@@ -26,11 +26,11 @@ def get_seizure_events(filepath: str) -> List[Dict[str, str]]:
         # Lo pasamos a diccionario
         event_data = {
             "seizure_number": int(match[0]),
-            "file_name": match[1],
-            "registration_start_time": match[2],
-            "registration_end_time": match[3],
-            "seizure_start_time": match[4],
-            "seizure_end_time": match[5]
+            "file_name": match[1].strip(),
+            "registration_start_time": match[2].strip(),
+            "registration_end_time": match[3].strip(),
+            "seizure_start_time": match[4].strip(),
+            "seizure_end_time": match[5].strip()
         }
         seizure_events.append(event_data)
 
