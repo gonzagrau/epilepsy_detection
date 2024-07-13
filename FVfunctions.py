@@ -255,7 +255,7 @@ def getMeData(sig: np.ndarray,
     ###########################################################################
 
     arr_seg = np.concatenate((arr_filtered_seg_sig_true, arr_filtered_seg_sig_false))
-    arr_labels = np.concatenate((labels_false, labels_true))
+    arr_labels = np.concatenate((labels_true, labels_false))
 
     return arr_seg, arr_labels
 
