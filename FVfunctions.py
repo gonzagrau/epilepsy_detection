@@ -86,11 +86,12 @@ def closest(lst: List[float] | np.ndarray, K: float | int) -> float:
     return lst[min(range(len(lst)), key = lambda i: abs(K-lst[i]))]
 
 
-def pot4band(arr_freq: np.ndarray, psd: np.ndarray) -> np.ndarray:
+def pot4band(arr_freq: np.ndarray, psd: np.ndarray, tipo: str = 'absoluta') -> np.ndarray:
     """
-    Calcula la potencia absoluta de cada banda frecuencial de ritmos cerebrales en una PSD
+    Calcula la potencia absoluta o relativa de cada banda frecuencial de ritmos cerebrales en una PSD
     :param arr_freq: bins de frecuencias en la PSD
     :param psd: power sprectral density estimada
+    :param tipo: indica si es la potencia relativa o absoluta 
     :return: array 1D con la potencia de cada banda
     """
     # 0- Definición de lista de almacenamiento
@@ -113,16 +114,20 @@ def pot4band(arr_freq: np.ndarray, psd: np.ndarray) -> np.ndarray:
 
     # 5- Preparación de arrays
     arr_pot_abs4band = np.array(arr_pot_abs4band)
+
+    if tipo == 'relativa':
+        arr_pot_abs4band = arr_pot_abs4band / np.sum(arr_pot_abs4band)
     
     return arr_pot_abs4band
 
 
-def pot4signals(arr_signals: np.ndarray, fs: int=512, divisor: int=100) -> np.ndarray:
+def pot4signals(arr_signals: np.ndarray, fs: int=512, divisor: int=100,tipo: str = 'absoluta') -> np.ndarray:
     """
     Calcula la potencia en cada banda para un array de señales, estimando PSD con Welch
     :param arr_signals: matriz NxL donde cada fila es una señal de longitud L
     :param fs: frecuencia de muestro
     :param divisor: cantidad de segmentos para welch
+    :param tipo: indica si es la potencia relativa o absoluta 
     :return:
     """
     # 0- Cálculo del nper
@@ -133,7 +138,7 @@ def pot4signals(arr_signals: np.ndarray, fs: int=512, divisor: int=100) -> np.nd
     arr_psd = np.array([signal.welch(x=sig, fs=fs, noverlap=nper // 2, nperseg=nper)[1] for sig in arr_signals])
 
     # 2 Cálculo de potencias para cada señal del array de señales
-    arr_pot4signals = np.array([pot4band(arr_freq, psd) for psd in arr_psd])
+    arr_pot4signals = np.array([pot4band(arr_freq, psd,tipo) for psd in arr_psd])
 
     return arr_pot4signals
 
