@@ -12,7 +12,7 @@ import pandas as pd
 def online_test(model: LinearSVC,
                 channels: List[np.ndarray],
                 ch_names: List[str],
-                seizures: List[Dict[str, str]],
+                ex_seiz: Dict[str, str],
                 name: str,
                 fs: int = 512 ) -> None :
     """
@@ -20,15 +20,20 @@ def online_test(model: LinearSVC,
     :param model: modelo pre-entrenado
     :param channels: señales leidas de diversos canales de EEG
     :param ch_names: nombres de los canales involucrados
-    :param seizures: lista o array con los eventos epilépticos conocidos
+    :param ex_seiz: un evento epiléptico, en forma de diccionario
     :param name: nombre del canal
     :param fs: frecuencia de muestreo
     """
-    ex_channel = channels[0]
-    ex_seiz = seizures[0]
     mtx_t_reg = np.array([ex_seiz['registration_start_time'], ex_seiz['registration_end_time']])
-    arr_mtx_t_epi = get_seizure_array(seizures)
-
+    arr_mtx_t_epi = get_seizure_array([ex_seiz])[0]
+    t_epi_start = np.uint32(time2seg(time=arr_mtx_t_epi[0], ref_time=mtx_t_reg[0]))
+    t_epi_end = np.uint32(time2seg(time=arr_mtx_t_epi[1], ref_time=mtx_t_reg[0]))
+    i_start = int(fs * (t_epi_start - 200))
+    if i_start < 0:
+        return
+    i_end = int(fs * (t_epi_end + 50))
+    channels = channels[:, i_start : i_end]
+    ex_channel = channels[0]
 
     # Array de instantes
     start = 0
@@ -74,17 +79,9 @@ def online_test(model: LinearSVC,
     ax.add_collection(line_collection_true)
     ax.add_collection(line_collection_false)
 
-    for i in range(len(arr_mtx_t_epi)):
-        # 1.0- Obtención de instantes característicos del ataque epiléptico
-        mtx_inst = arr_mtx_t_epi[i]
+    plt.axvline(x=t_epi_start, linestyle=":", color="black")
+    plt.axvline(x=t_epi_end, linestyle=":", color="black")
 
-        t_epi_start = time2seg(time=mtx_inst[0], ref_time=mtx_t_reg[0])
-        t_epi_end = time2seg(time=mtx_inst[1], ref_time=mtx_t_reg[0])
-
-        plt.axvline(x=t_epi_start, linestyle=":", color="black")
-        plt.axvline(x=t_epi_end, linestyle=":", color="black")
-
-    plt.xlim((t_epi_start - 200, t_epi_end + 60))
     plt.title(f"{name}")
     plt.xlabel("Tiempo [s]")
     plt.ylabel("Magnitud [mV]")
