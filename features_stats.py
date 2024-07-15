@@ -25,7 +25,7 @@ def stats_features(arr_signals : np.ndarray) -> Dict:
         1: "RMS",
         2: "skewness",
         3: "media",
-        4: "desvio estandar",
+        4: "devest",
         "matriz de features stat": stat_vector
     }
     return stat_dic

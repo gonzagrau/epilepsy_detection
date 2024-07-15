@@ -6,6 +6,7 @@ import scipy.signal as signal
 import pandas as pd
 from features_stats import stats_features
 from typing import Tuple, List
+from sklearn.decomposition import PCA
 
 # CONSTANTE: Bandas de ritmos cerebrales
 BANDAS = {"delta": [0.5, 4],
@@ -143,6 +144,26 @@ def pot4signals(arr_signals: np.ndarray, fs: int=512, divisor: int=100,tipo: str
     return arr_pot4signals
 
 
+def coordination(channels: List[np.ndarray]) -> np.ndarray:
+    """
+    Dada una lista de mediciones en distintos canales en paralelo, devuelve una medida
+    de la correlación entre canales dada por un análisis de componentes principales
+    :param channels: lista de segmentos de lecturas de multiples canales
+    :return: para cada conjunto de segmentos, la medida de correlación cruzada
+    """
+    N_seg = channels[0].shape[0]
+    N_channels = len(channels)
+    cord_lst = []
+    for i in range(N_seg):
+        segments = np.array([channel[i, :] for channel in channels]).T
+        pca = PCA(n_components=N_channels)
+        pca.fit(segments)
+        cord = pca.explained_variance_ratio_[0]
+        cord_lst.append(cord)
+
+    return np.array(cord_lst, ndmin=2).T
+
+
 def get_interval_range(t_start: int, t_end: int, fs: int, winlen: int) -> np.ndarray:
     """
     Crea un array que representa un slice temporal desde t_start hasta t_end con un ancho de winlen, los 3 en [s]
@@ -160,21 +181,22 @@ def get_interval_range(t_start: int, t_end: int, fs: int, winlen: int) -> np.nda
     return interval
 
 
-def getMeData(sig: np.ndarray,
+def getMeData(channels: np.ndarray,
               mtx_t_reg: np.ndarray,
               arr_mtx_t_epi: np.ndarray,
               winlen: int=2,
               fs: int=512,
-              proportion: float=0.4) -> Tuple[np.ndarray, np.ndarray]:
+              proportion: float=0.4) -> Tuple[List[np.ndarray], np.ndarray]:
     """
     Segmenta la señal en intervalos de longitud winlen [s] clasificados como 1 o 0 (epilepsio o no epilepsia)
-    :param sig: señal leida de un único canal EEG
+    :param channels: señales leidas de un conjunto de canales de EEG
     :param mtx_t_reg: array 2x3 con inicio y final de lectura en [hh, mm, ss]
     :param arr_mtx_t_epi: array Nx(2x3) con N inicios y finales de ataques epilépticos en [hh, mm, ss]
     :param winlen: longitud de los segmentos a extraer
     :param fs: frecuencia de muestreo
-    :param proportion: proporcios de segmentos 'False' (la de 'True' sería 1.0 - proportion)
-    :return: tupla con arr_seg (matriz de señales en cada fila) y labels (etiqueta de cada segmentos)
+    :param proportion: proporcions de segmentos 'False' (la de 'True' sería 1.0 - proportion)
+    :return: tupla con arr_seg (lista de matrices con segmentos en cada fila) y labels (etiqueta de cada segmentos)
+    NOTE: True = epilepsia en el segmento
     """
     # 0- Declaración de parámetros importantes
     step = fs * winlen
@@ -220,16 +242,20 @@ def getMeData(sig: np.ndarray,
         false_indexes = np.uint32(np.concatenate((false_indexes, interval)))
 
     ###########################################################################
-    # PARTE 3 - Obtención de feature vectors y labels de elementos verdaderos
+    # PARTE 3 - Obtención de segmentos y labels de elementos verdaderos
     ###########################################################################
 
     # 3.0- Obtención de array con los segmentos de señal verdaderos
-    arr_seg_sig_true = np.array([sig[idx:idx + step] for idx in true_indexes])
     labels_true = np.ones(len(true_indexes))
+    list_arr_seg_true = []
+    for channel in channels:
+        arr_seg_sig_true = np.array([channel[idx:idx + step] for idx in true_indexes])
 
-    # 3.1- Filtrado de los segmentos de la señal verdaderos
-    arr_filtered_seg_sig_true = FIRfilterBP(arr_seg_sig_true)
-    arr_filtered_seg_sig_true = IIRfilterBS(arr_filtered_seg_sig_true)
+        # 3.1- Filtrado de los segmentos de la señal verdaderos
+        arr_filtered_seg_sig_true = FIRfilterBP(arr_seg_sig_true)
+        arr_filtered_seg_sig_true = IIRfilterBS(arr_filtered_seg_sig_true)
+
+        list_arr_seg_true.append(arr_filtered_seg_sig_true)
 
     ###########################################################################
     # PARTE 4 - Obtención de feature vectors y labels de elementos falsos
@@ -243,21 +269,67 @@ def getMeData(sig: np.ndarray,
     selected_false_indexes = random.sample(population=list(false_indexes), k=k_false_segments)
 
     # 4.2- Obtención de array con los segmentos de la señal falsos
-    arr_seg_sig_false = np.array([sig[idx: idx + step] for idx in selected_false_indexes])
     labels_false = np.zeros(len(selected_false_indexes))
+    list_arr_seg_false = []
+    for channel in channels:
+        arr_seg_sig_false = np.array([channel[idx: idx + step] for idx in selected_false_indexes])
 
-    # 4.3- Filtrado de los segmentos de la señal falsos
-    arr_filtered_seg_sig_false = FIRfilterBP(arr_seg_sig_false)
-    arr_filtered_seg_sig_false = IIRfilterBS(arr_filtered_seg_sig_false)
+        # 4.3- Filtrado de los segmentos de la señal falsos
+        arr_filtered_seg_sig_false = FIRfilterBP(arr_seg_sig_false)
+        arr_filtered_seg_sig_false = IIRfilterBS(arr_filtered_seg_sig_false)
+
+        list_arr_seg_false.append(arr_filtered_seg_sig_false)
 
     ###########################################################################
     # PARTE 5 - Unión de arrays
     ###########################################################################
-
-    arr_seg = np.concatenate((arr_filtered_seg_sig_true, arr_filtered_seg_sig_false))
     arr_labels = np.concatenate((labels_true, labels_false))
+    list_seg = []
+    for arr_true, arr_false in zip(list_arr_seg_true, list_arr_seg_false):
+        arr_seg = np.concatenate((arr_true, arr_false))
+        list_seg.append(arr_seg)
 
-    return arr_seg, arr_labels
+    return list_seg, arr_labels
+
+
+def getMeFeatures(list_seg: List[np.ndarray], ch_names: List[str], fs: int=512) -> pd.DataFrame:
+    """
+    A partir de los segmentos generados por getMeData, extraemos todas las features
+    :param list_seg:
+    :param ch_names: nombre de los canales involucrados
+    :param fs: frecuencia de muestreo
+    :return:
+    """
+
+    # Potencia y estadística
+    pot_list = []
+    pot_cols = []
+    stat_cols = []
+    stat_list = []
+    for channel, ch_name in zip(list_seg, ch_names):
+        # potencia
+        pot_seg = pot4signals(channel, fs, divisor=1, tipo='Relativa')
+        pot_list.append(pot_seg)
+        pot_cols.extend([f"{ch_name}_potRel{band.capitalize()}" for band in BANDAS.keys()])
+
+        # estadística
+        stats_data = stats_features(channel)
+        stats_seg = stats_data["matriz de features stat"]
+        stat_list.append(stats_seg)
+        stats_names = [f"{ch_name}_{func}" for func in list(stats_data.values())[:-1]]
+        stat_cols.extend(stats_names)
+    pot_all = np.hstack(pot_list)
+    stats_all = np.hstack(stat_list)
+
+    # Coordinacion
+    coord_arr = coordination(list_seg)
+
+    # Feature vector
+    arr_fv = np.hstack((pot_all, stats_all, coord_arr))
+    columnas = pot_cols + stat_cols + ['coordination']
+    df_fv = pd.DataFrame(data=arr_fv, columns=columnas)
+
+    return df_fv
 
 
 def test():
@@ -266,6 +338,7 @@ def test():
     path01 = rf"{DATA_DIR}PN05/PN05-2.edf"
     raw01 = io.read_raw_edf(path01)
     info = raw01.info
+    fs = info["sfreq"]
 
     # Se obtienen los canales seleccionados del lazo izquierdo
     filt_ch_nms = ['EEG T3','EEG T5','EEG F7','EEG F3','EEG C3','EEG P3']
@@ -286,23 +359,9 @@ def test():
     mtx_inst1 = np.array(["08.45.25", "08.46.00"])
     arr_mtx_t_epi = np.array([mtx_inst1])
 
-    # Utilización de la función para una única señal
-    arr_seg, arr_labels = getMeData(sig=data_namefilt[0], mtx_t_reg=mtx_t_reg, arr_mtx_t_epi=arr_mtx_t_epi)
-
-    # Potencia
-    fs = info["sfreq"]
-    pot_seg = pot4signals(arr_seg, fs, divisor=1)
-    pot_names = [f"potAbs{band.capitalize()}" for band in BANDAS.keys()]
-
-    # Estadistica
-    stats_data = stats_features(arr_seg)
-    stats_names = list(stats_data.values())[:-1]
-    stats_seg = stats_data["matriz de features stat"]
-
-    # Feature fector
-    arr_fv = np.hstack((pot_seg, stats_seg))
-    columnas = pot_names + stats_names
-    df_fv = pd.DataFrame(data=arr_fv, columns=columnas)
+    # Extraemos segmentos y features para los canales seleccionados
+    list_segs, arr_labels = getMeData(channels=data_namefilt, mtx_t_reg=mtx_t_reg, arr_mtx_t_epi=arr_mtx_t_epi)
+    df_fv = getMeFeatures(list_segs, filt_ch_nms, fs)
     print(df_fv.head(10))
 
     return  df_fv
