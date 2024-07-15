@@ -14,9 +14,13 @@ def online_signal_test(model: LinearSVC,
                        ch_names: List[str],
                        ex_seiz: Dict[str, str],
                        name: str,
-                       fs: int = 512) -> None :
+                       fs: int = 512,
+                       t_ant: int = 300,
+                       t_pos: int = 60) -> None :
     """
     Plotea pintando de rojo los eventos epilépticos en un canal
+    :param t_pos: tiempo posterior a la seizure para ver
+    :param t_ant: tiempo antes de la seizure a analizar
     :param model: modelo pre-entrenado
     :param channels: señales leidas de diversos canales de EEG
     :param ch_names: nombres de los canales involucrados
@@ -24,8 +28,6 @@ def online_signal_test(model: LinearSVC,
     :param name: nombre del canal
     :param fs: frecuencia de muestreo
     """
-    t_ant = 300 # [s]
-    t_pos = 100  # [s]
     mtx_t_reg = np.array([ex_seiz['registration_start_time'], ex_seiz['registration_end_time']])
     arr_mtx_t_epi = get_seizure_array([ex_seiz])[0]
     t_epi_start = np.uint32(time2seg(time=arr_mtx_t_epi[0], ref_time=mtx_t_reg[0]))
