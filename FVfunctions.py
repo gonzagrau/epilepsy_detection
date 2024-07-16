@@ -298,7 +298,7 @@ def getMeFeatures(list_seg: List[np.ndarray], ch_names: List[str], fs: int=512) 
     :param list_seg:
     :param ch_names: nombre de los canales involucrados
     :param fs: frecuencia de muestreo
-    :return:
+    :return: un dataframe donde cada columna es una feature y cada fila es un feature vector
     """
 
     # Potencia y estadística
