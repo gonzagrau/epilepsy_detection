@@ -50,13 +50,12 @@ def online_signal_test(model: LinearSVC,
     step = int(fs * 2)
 
     # 3: Se obtienen los segmentos, tanto de la señal como del array de instantes
-    print(f"segmentando las señales de {name}...")
+    print(f"Segmentando las señales de {name}...")
     arr_seg_sig = [np.array([sig[idx: idx+step] for idx in indexes]) for sig in channels]
     arr_seg_t = np.array([arr_t[idx:(idx + step)] for idx in indexes])
-    print(arr_seg_sig[0].shape)
 
     # 5: Se determinan los fv de estos segmentos
-    print(f"extrayendo las features de {name}...")
+    print(f"Extrayendo las features de {name}...")
     df_fv = getMeFeatures(arr_seg_sig, ch_names, fs)
 
     # 6: Se predicen las labels con el modelo
@@ -65,7 +64,7 @@ def online_signal_test(model: LinearSVC,
     # 7: A partir de las labels predecidas se arman 2 'line_collection'
 
     # 7.1: Líneas true
-    print(f"prediciendo en {name}...")
+    print(f"Prediciendo en {name}...")
     disp_channel = arr_seg_sig[0]
     arr_lineas_true = [np.column_stack((arr_seg_t[i], disp_channel[i])) for i in range(len(predictions)) 
                        if predictions[i] == 1]
@@ -77,7 +76,7 @@ def online_signal_test(model: LinearSVC,
     line_collection_false = LineCollection(arr_lineas_false, colors="green", linewidths=1)
 
     # 8: Ploteo de los segmentos
-    print(f"ploteando en {name}...")
+    print(f"Ploteando en {name}...")
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.add_collection(line_collection_true)
     ax.add_collection(line_collection_false)
