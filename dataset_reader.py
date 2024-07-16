@@ -57,7 +57,7 @@ def read_channel(filename: str, channel: str='EEG T3') -> np.ndarray:
 
 def main():
     DATA_DIR = r"../eeg_dataset/physionet.org/files/siena-scalp-eeg/1.0.0/"
-    path = rf"{DATA_DIR}PN01/Seizures-list-PN01.txt"
+    path = rf"{DATA_DIR}PN05/Seizures-list-PN05.txt"
     seizures = get_seizure_events(path)
     for seiz in seizures:
         print('\n'.join([f"{key}: {val}" for key, val in seiz.items()]))
