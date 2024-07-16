@@ -68,12 +68,12 @@ def online_signal_test(model: LinearSVC,
     disp_channel = arr_seg_sig[0]
     arr_lineas_true = [np.column_stack((arr_seg_t[i], disp_channel[i])) for i in range(len(predictions)) 
                        if predictions[i] == 1]
-    line_collection_true = LineCollection(arr_lineas_true, colors="red", linewidths=1)
+    line_collection_true = LineCollection(arr_lineas_true, colors="red", linewidths=0.5, label='Epilepsia detectada')
 
     # 7.2: Líneas false
     arr_lineas_false = [np.column_stack((arr_seg_t[i], disp_channel[i])) for i in range(len(predictions)) 
                         if predictions[i] == 0]
-    line_collection_false = LineCollection(arr_lineas_false, colors="green", linewidths=1)
+    line_collection_false = LineCollection(arr_lineas_false, colors="green", linewidths=0.5, label='Sin epilepsia')
 
     # 8: Ploteo de los segmentos
     print(f"Ploteando en {name}...")
@@ -81,11 +81,13 @@ def online_signal_test(model: LinearSVC,
     ax.add_collection(line_collection_true)
     ax.add_collection(line_collection_false)
 
-    plt.axvline(x=arr_t[int(t_ant*fs)], linestyle=":", color="black")
-    plt.axvline(x=arr_t[int(-t_pos*fs)], linestyle=":", color="black")
+    plt.axvline(x=arr_t[int(t_ant*fs)], linestyle="-.", linewidth=1.25, color="black", label='Inicio del ataque')
+    plt.axvline(x=arr_t[int(-t_pos*fs)], linestyle="-.", linewidth=1.25, color="black", label='Final del ataque')
 
-    plt.title(f"{name}")
+    plt.title(f"Predicciones en {name.strip('.edf')}", fontsize=12)
     plt.xlabel("Tiempo [s]")
     plt.ylabel("Magnitud [mV]")
+    plt.legend(loc='upper left', fontsize=8, framealpha=1.)
+    plt.grid(linestyle='--')
     ax.autoscale_view()
     plt.show()
