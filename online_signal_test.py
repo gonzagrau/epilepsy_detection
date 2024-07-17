@@ -91,3 +91,5 @@ def online_signal_test(model: LinearSVC,
     plt.grid(linestyle='--')
     ax.autoscale_view()
     plt.show()
+
+    return arr_lineas_true, arr_lineas_false
