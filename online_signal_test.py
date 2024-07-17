@@ -66,13 +66,14 @@ def online_signal_test(model: LinearSVC,
     # 7.1: Líneas true
     print(f"Prediciendo en {name}...")
     disp_channel = arr_seg_sig[0]
-    arr_lineas_true = [np.column_stack((arr_seg_t[i], disp_channel[i])) for i in range(len(predictions)) 
-                       if predictions[i] == 1]
+    arr_seg_all = [np.column_stack((arr_seg_t[i], disp_channel[i])) for i in range(len(predictions))]
+
+    arr_lineas_true = [arr_seg_all[i] for i in range(len(predictions)) if predictions[i] == 1]
     line_collection_true = LineCollection(arr_lineas_true, colors="red", linewidths=0.5, label='Epilepsia detectada')
 
     # 7.2: Líneas false
-    arr_lineas_false = [np.column_stack((arr_seg_t[i], disp_channel[i])) for i in range(len(predictions)) 
-                        if predictions[i] == 0]
+    arr_lineas_false = [arr_seg_all[i] for i in range(len(predictions)) if predictions[i] == 0]
+    
     line_collection_false = LineCollection(arr_lineas_false, colors="green", linewidths=0.5, label='Sin epilepsia')
 
     # 8: Ploteo de los segmentos
@@ -92,4 +93,4 @@ def online_signal_test(model: LinearSVC,
     ax.autoscale_view()
     plt.show()
 
-    return arr_lineas_true, arr_lineas_false
+    return arr_lineas_true, arr_lineas_false, arr_seg_all
